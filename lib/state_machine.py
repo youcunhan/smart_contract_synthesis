@@ -1,6 +1,10 @@
 from lib.ts import Ts
 import z3
 
+def contains(x, e):
+    return x.__repr__() == e.__repr__() or any([contains(x, c) for c in e.children()])
+
+
 class smart_contract_state_machine:
     def __init__(self, name):
         self.name = name
@@ -21,7 +25,15 @@ class smart_contract_state_machine:
         self.transitions.append(tr_name)
         self.tr_parameters[tr_name] = parameters
         self.condition_guards[tr_name] = guard
+        print(transfer_func)
+        for state in self.states:
+            if not contains(self.states[state][1], transfer_func):
+                transfer_func = z3.simplify(z3.And(transfer_func, self.states[state][1] == self.states[state][0]))
         self.transfer_func[tr_name] = transfer_func
+
+    def clear_guards(self):
+        for i in self.condition_guards.keys():
+            self.condition_guards[i] = z3.BoolVal(True)
 
     def change_guard(self, tr_name, *new_guard):
         if tr_name not in self.transitions:
@@ -99,10 +111,15 @@ class smart_contract_state_machine:
             print(self.now_state)
         for tr_name, *parameters in trace:
             if not self.transfer(tr_name, show_log, parameters):
-                print("reject")
-                return
-        print("accept")
+                if show_log:
+                    print("reject")
+                return "reject"
+        if show_log:
+            print("accept")
+        return "accept"
         
-    def synthesis_guard(self, operator, negative_traces):
-        #generate predicate of states to guard
-        pass
+    # def prove_inductive(self, property):
+
+    # def synthesis_guard(self, operator, negative_trace, positive_traces):
+    #     #generate predicate of states to guard
+    #     pass

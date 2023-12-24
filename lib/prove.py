@@ -32,7 +32,7 @@ def prove(f):
     else:
         print ("failed to prove: ", result)
         print (f)
-        # print (s.model())
+        print (s.model())
     return s
 
 def prove_inductive(_ts, _property, lemma = None):
