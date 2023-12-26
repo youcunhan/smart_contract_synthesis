@@ -1,3 +1,4 @@
+from lib.bmc import extract_model
 from lib.ts import Ts
 import z3
 
@@ -15,6 +16,8 @@ class smart_contract_state_machine:
         self.transfer_func = {}
         self.ts = Ts(name)
         self.now_state = None
+        self.now, self.nowOut = self.add_state('now', z3.BitVecSort(256))
+        self.func, self.funcOut = self.add_state('func', z3.StringSort())
 
     def add_state(self, state_name, type):
         state, stateOut = self.ts.add_var(type, name = state_name)
@@ -24,11 +27,16 @@ class smart_contract_state_machine:
     def add_tr(self, tr_name, parameters, guard, transfer_func):
         self.transitions.append(tr_name)
         self.tr_parameters[tr_name] = parameters
+        guard = z3.simplify(z3.And(guard, self.nowOut > self.now))
         self.condition_guards[tr_name] = guard
+        transfer_func = z3.And(transfer_func, self.funcOut == tr_name)
         print(transfer_func)
         for state in self.states:
+            if state == 'now' or state == 'func':
+                continue
             if not contains(self.states[state][1], transfer_func):
                 transfer_func = z3.simplify(z3.And(transfer_func, self.states[state][1] == self.states[state][0]))
+        
         self.transfer_func[tr_name] = transfer_func
 
     def clear_guards(self):
@@ -52,7 +60,7 @@ class smart_contract_state_machine:
             return True
 
     def set_init(self, init_state):
-        self.ts.Init = init_state
+        self.ts.Init = z3.And(init_state, self.now == 0, self.func == 'init')
 
     def transfer(self, tr_name, show_log, *parameters):
         if parameters == None:
@@ -93,6 +101,7 @@ class smart_contract_state_machine:
                     print("Transfer success: ", tr_name, "with parameters", parameters)
                 s = z3.Solver()
                 s.add(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
+                # print(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
                 result = s.check()
                 m = s.model()
                 self.now_state = z3.BoolVal(True)
@@ -118,8 +127,28 @@ class smart_contract_state_machine:
             print("accept")
         return "accept"
         
-    # def prove_inductive(self, property):
-
+    def bmc(self, property):
+        import lib.bmc
+        self.ts.Tr = z3.BoolVal(False)
+        for tr in self.transitions:
+            self.ts.Tr = z3.simplify(z3.Or(self.ts.Tr, z3.And(self.transfer_func[tr],self.condition_guards[tr])))
+        xs = [v[0] for v in self.states.values()]
+        xns = [v[1] for v in self.states.values()]
+        fvs = []
+        for p in self.tr_parameters.values():
+            if p != None:
+                for v in p:
+                    if v not in fvs:
+                        fvs.append(v)
+        print(fvs)
+        print(self.ts.Init)
+        print(self.ts.Tr)
+        print(property)
+        model = lib.bmc.bmc(self.ts.Init, self.ts.Tr, property, fvs, xs, xns)
+        if model != None:
+            extract_model(model,'func')
+        else:
+            print("No model found!")
     # def synthesis_guard(self, operator, negative_trace, positive_traces):
     #     #generate predicate of states to guard
     #     pass
