@@ -140,15 +140,27 @@ class smart_contract_state_machine:
                 for v in p:
                     if v not in fvs:
                         fvs.append(v)
-        print(fvs)
-        print(self.ts.Init)
-        print(self.ts.Tr)
-        print(property)
+        # print(fvs)
+        # print(self.ts.Init)
+        # print(self.ts.Tr)
+        # print(property)
         model = lib.bmc.bmc(self.ts.Init, self.ts.Tr, property, fvs, xs, xns)
         if model != None:
-            extract_model(model,'func')
+            rd = extract_model(model,'func')
+            trace = []
+            for i in range(1, len(rd)-2):
+                # print(rd[i])
+                tr = rd[i]['func'].__str__()[1:-1]
+                rule = [tr, self.nowOut == rd[i]['now']]
+                # print(tr)
+                if self.tr_parameters[tr] != None:
+                    for j in self.tr_parameters[tr]:
+                        rule.append(j == rd[i][j.__str__()])
+                trace.append(tuple(rule))
+            return trace
         else:
-            print("No model found!")
+            # print("No model found!")
+            return None
     # def synthesis_guard(self, operator, negative_trace, positive_traces):
     #     #generate predicate of states to guard
     #     pass
