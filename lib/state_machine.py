@@ -27,10 +27,8 @@ class smart_contract_state_machine:
     def add_tr(self, tr_name, parameters, guard, transfer_func):
         self.transitions.append(tr_name)
         self.tr_parameters[tr_name] = parameters
-        guard = z3.simplify(z3.And(guard, self.nowOut > self.now))
         self.condition_guards[tr_name] = guard
         transfer_func = z3.And(transfer_func, self.funcOut == tr_name)
-        print(transfer_func)
         for state in self.states:
             if state == 'now' or state == 'func':
                 continue
@@ -63,55 +61,31 @@ class smart_contract_state_machine:
         self.ts.Init = z3.And(init_state, self.now == 0, self.func == 'init')
 
     def transfer(self, tr_name, show_log, *parameters):
-        if parameters == None:
-            success = z3.And(self.now_state, self.condition_guards[tr_name])
-            s = z3.Solver()
-            s.add(success)
-            result = s.check()
-            if result == z3.unsat:
-                if show_log:
-                    print("Transfer failed: ", tr_name, " with no parameters")
-                return False
-            else:
-                if show_log:
-                    print("Transfer success: ", tr_name, " with no parameters")
-                s = z3.Solver()
-                s.add(z3.And(self.now_state, self.transfer_func[tr_name]))
-                result = s.check()
-                m = s.model()
-                self.now_state = z3.BoolVal(True)
-                for v in self.states.values():
-                    self.now_state = z3.And(self.now_state, v[0] == m[v[1]])
-                self.now_state = z3.simplify(self.now_state)
-                if show_log:
-                    print("Now state: ")
-                    print(self.now_state)
-                return True
+        success = z3.And(self.now_state, self.condition_guards[tr_name], self.nowOut > self.now, z3.And(*parameters))
+        # print(success)
+        s = z3.Solver()
+        s.add(success)
+        result = s.check()
+        if result == z3.unsat:
+            if show_log:
+                print("Transfer failed: ", tr_name, "with parameters", parameters)
+            return False
         else:
-            success = z3.And(self.now_state, self.condition_guards[tr_name], z3.And(*parameters))
+            if show_log:
+                print("Transfer success: ", tr_name, "with parameters", parameters)
             s = z3.Solver()
-            s.add(success)
+            s.add(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
+            # print(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
             result = s.check()
-            if result == z3.unsat:
-                if show_log:
-                    print("Transfer failed: ", tr_name, "with parameters", parameters)
-                return False
-            else:
-                if show_log:
-                    print("Transfer success: ", tr_name, "with parameters", parameters)
-                s = z3.Solver()
-                s.add(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
-                # print(z3.And(self.now_state, self.transfer_func[tr_name], z3.And(*parameters)))
-                result = s.check()
-                m = s.model()
-                self.now_state = z3.BoolVal(True)
-                for v in self.states.values():
-                    self.now_state = z3.And(self.now_state, v[0] == m[v[1]])
-                self.now_state = z3.simplify(self.now_state)
-                if show_log:
-                    print("Now state: ")
-                    print(self.now_state)
-                return True
+            m = s.model()
+            self.now_state = z3.BoolVal(True)
+            for v in self.states.values():
+                self.now_state = z3.And(self.now_state, v[0] == m[v[1]])
+            self.now_state = z3.simplify(self.now_state)
+            if show_log:
+                print("Now state: ")
+                print(self.now_state)
+            return True
     
     def simulate(self, trace, show_log=False):
         self.now_state = self.ts.Init
@@ -129,9 +103,10 @@ class smart_contract_state_machine:
         
     def bmc(self, property):
         import lib.bmc
+        lib.bmc.index = 0
         self.ts.Tr = z3.BoolVal(False)
         for tr in self.transitions:
-            self.ts.Tr = z3.simplify(z3.Or(self.ts.Tr, z3.And(self.transfer_func[tr],self.condition_guards[tr])))
+            self.ts.Tr = z3.simplify(z3.Or(self.ts.Tr, z3.And(self.transfer_func[tr], self.condition_guards[tr], self.nowOut > self.now)))
         xs = [v[0] for v in self.states.values()]
         xns = [v[1] for v in self.states.values()]
         fvs = []
@@ -146,7 +121,9 @@ class smart_contract_state_machine:
         # print(property)
         model = lib.bmc.bmc(self.ts.Init, self.ts.Tr, property, fvs, xs, xns)
         if model != None:
+            # print(model)
             rd = extract_model(model,'func')
+            # print(rd)
             trace = []
             for i in range(1, len(rd)-2):
                 # print(rd[i])
@@ -155,12 +132,57 @@ class smart_contract_state_machine:
                 # print(tr)
                 if self.tr_parameters[tr] != None:
                     for j in self.tr_parameters[tr]:
-                        rule.append(j == rd[i][j.__str__()])
+                        if j.__str__() in rd[i].keys():
+                            rule.append(j == rd[i][j.__str__()])
+                        else:
+                            # print("Error: parameter not found!", i, j.__str__())
+                            rule.append(j == rd[i-1][j.__str__()])
                 trace.append(tuple(rule))
             return trace
         else:
             # print("No model found!")
             return None
-    # def synthesis_guard(self, operator, negative_trace, positive_traces):
-    #     #generate predicate of states to guard
-    #     pass
+    def synthesize_one_guard(self, possible_guards, negative_trace, positive_traces):
+        old_guard = self.condition_guards.copy()
+        self.clear_guards()
+        result_guard = []
+        for tr in self.transitions:
+            for g in possible_guards:
+                self.add_guard(tr, g)
+                # print(tr, g)
+                # print(statemachine.condition_guards)
+                if self.simulate(negative_trace, show_log=False) == 'reject':
+                    all_accept = True
+                    for ptrace in positive_traces:
+                        if self.simulate(ptrace, show_log=False) == 'reject':
+                            all_accept = False
+                            break
+                    if all_accept:
+                        result_guard.append([tr, g])
+                self.clear_guards()
+        self.condition_guards = old_guard
+        # print('1', self.condition_guards)
+        return result_guard
+    
+def synthesize(self, properties, possible_guards, positive_traces):
+    while iter < 100:
+        print("iter", iter)
+        iter += 1
+        ntraces = []
+        for r in properties:
+            ntrace = self.bmc(z3.Not(r))
+            if ntrace == None:
+                print("property", r, "verified")
+                continue
+            else:
+                print("property", r, "not verified")
+                print("find counter example:")
+                print(ntrace)
+                ntraces.append(ntrace)
+        for ntrace in ntraces:
+            result_guard = self.synthesize_one_guard(possible_guards, ntrace, positive_traces)
+            tr, g = result_guard[0]
+            print("synthesized guard:")
+            print(result_guard)
+            self.add_guard(tr, g)
+            print()
