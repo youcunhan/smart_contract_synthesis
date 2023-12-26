@@ -28,6 +28,7 @@ vendor/
 .env.*.production
 
 # Ignore sensitive or private information
+tmp.txt
 secrets.txt
 credentials.json
 
@@ -40,3 +41,4 @@ credentials.json
 *.sublime-project
 *.sublime-workspace
 *.pyc
+

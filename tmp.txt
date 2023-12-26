@@ -1,1 +1,0 @@
-[['invest', state == 0], ['invest', now' < 10000], ['close_success', state == 0]]
