@@ -218,6 +218,7 @@ class smart_contract_state_machine:
         candidate_guards.append(self.states['state'][0]==0)
         candidate_guards.append(self.states['state'][0]==1)
         candidate_guards.append(self.states['state'][0]==2)
+        print(len(candidate_guards))
         self.clear_guards()
         for tr in self.candidate_condition_guards:
             self.candidate_condition_guards[tr] = []
@@ -226,15 +227,17 @@ class smart_contract_state_machine:
                 if not drop_unreasonable:
                     self.candidate_condition_guards[tr].append(candidates)
                 else:
-                    can_pass = False
+                    pass_all = True
                     self.add_guard(tr, candidates)
                     for trace in positive_traces:
-                        if self.simulate(trace, show_log=False) == 'accept':
-                            can_pass = True
+                        if self.simulate(trace, show_log=False) == 'reject':
+                            pass_all = False
                             break
                     self.clear_guards()
-                    if can_pass:
+                    if pass_all:
                         self.candidate_condition_guards[tr].append(candidates)
+        for tr in self.candidate_condition_guards:
+            print(tr, len(self.candidate_condition_guards[tr]))
         print(self.candidate_condition_guards)
     
     def synthesize_one_guard(self, negative_trace, positive_traces):
@@ -246,13 +249,14 @@ class smart_contract_state_machine:
                 # print(tr, g)
                 # print(statemachine.condition_guards)
                 if self.simulate(negative_trace, show_log=False) == 'reject':
-                    all_accept = True
-                    for ptrace in positive_traces:
-                        if self.simulate(ptrace, show_log=False) == 'reject':
-                            all_accept = False
-                            break
-                    if all_accept:
-                        result_guard.append([tr, g])
+                    # all_accept = True
+                    # for ptrace in positive_traces:
+                    #     if self.simulate(ptrace, show_log=False) == 'reject':
+                    #         all_accept = False
+                    #         break
+                    # if all_accept:
+                    #     result_guard.append([tr, g])
+                    result_guard.append([tr, g])
                 self.clear_guards()
         return result_guard
     
