@@ -5,16 +5,6 @@ from crowfunding.states import *
 p = z3.BitVec('p',256)
 now = statemachine.nowOut
 
-statemachine.set_init(z3.And(
-    z3.ForAll(p, deposits[p]==0),
-    raised == 0,
-    totalDeposits == 0,
-    state == OPEN,
-    aux_claimrefund == False,
-    aux_withdraw == False
-))
-
-
 sender = z3.BitVec('sender',256)
 value = z3.BitVec('amount',256)
 
@@ -59,7 +49,6 @@ statemachine.add_tr(
                    ),
     transfer_func = z3.And(depositsOut == z3.Update(deposits,p,0),
                            totalDepositsOut == totalDeposits - deposits[p],
-                           aux_claimrefundOut == True,
                         )
 )
 
@@ -70,6 +59,14 @@ statemachine.add_tr(
     guard = z3.And(state == SUCCESS,
                    ),
     transfer_func = z3.And(totalDepositsOut == 0,
-                           aux_withdrawOut == True,
                         )
 )
+
+statemachine.add_once()
+
+statemachine.set_init(z3.And(
+    z3.ForAll(p, deposits[p]==0),
+    raised == 0,
+    totalDeposits == 0,
+    state == OPEN,
+))

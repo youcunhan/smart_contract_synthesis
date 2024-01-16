@@ -28,7 +28,6 @@ vendor/
 .env.*.production
 
 # Ignore sensitive or private information
-tmp.txt
 secrets.txt
 credentials.json
 

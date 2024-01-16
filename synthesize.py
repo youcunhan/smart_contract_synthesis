@@ -4,37 +4,47 @@ from crowfunding.states import *
 from crowfunding.transaction import *
 from crowfunding.trace import *
 from crowfunding.property import *
+import time
 
-
+print("no strategy:")
 statemachine.clear_guards()
+T1 = time.time()
+statemachine.generate_candidate_guards(["<", "<=", ">", ">=", "="], positive_traces, drop_unreasonable=False)
+T2 = time.time()
+print("Time cost:%ss" % (T2 - T1))
+guard = statemachine.synthesize(properties, positive_traces, simulate_before_bmc=False)
+T3 = time.time()
+print('Time cost:%ss' % (T3 - T2))
 
-possible_guards = [
-    state == OPEN, 
-    state == SUCCESS, 
-    state == REFUND, 
-    now > CLOSETIME, 
-    now < CLOSETIME, 
-    raised >= GOAL, 
-    raised < GOAL, 
-]
 
-iter = 0
-# while True:
-while iter < 100:
-    print("iter", iter)
-    iter += 1
-    ntrace = statemachine.bmc(z3.Not(r2))
-    if ntrace == None:
-        print("no more counter example")
-        break
-    print("find counter example:")
-    print(ntrace)
-    result_guard = statemachine.synthesize_one_guard(possible_guards, ntrace, positive_traces)
-    tr, g = result_guard[0]
-    print("synthesized guard:")
-    print(result_guard)
-    statemachine.add_guard(tr, g)
-    print()
+print("drop unreasonable candidate guards:")
+statemachine.clear_guards()
+T1 = time.time()
+statemachine.generate_candidate_guards(["<", "<=", ">", ">=", "="], positive_traces, drop_unreasonable=True)
+T2 = time.time()
+print("Time cost:%ss" % (T2 - T1))
+guard = statemachine.synthesize(properties, positive_traces, simulate_before_bmc=False)
+T3 = time.time()
+print('Time cost:%ss' % (T3 - T2))
 
-print("Final guards:")
-print(statemachine.condition_guards)
+
+print("simulate before bmc:")
+statemachine.clear_guards()
+T1 = time.time()
+statemachine.generate_candidate_guards(["<", "<=", ">", ">=", "="], positive_traces, drop_unreasonable=False)
+T2 = time.time()
+print("Time cost:%ss" % (T2 - T1))
+guard = statemachine.synthesize(properties, positive_traces, simulate_before_bmc=True)
+T3 = time.time()
+print('Time cost:%ss' % (T3 - T2))
+
+
+print("both:")
+statemachine.clear_guards()
+T1 = time.time()
+statemachine.generate_candidate_guards(["<", "<=", ">", ">=", "="], positive_traces, drop_unreasonable=True)
+T2 = time.time()
+print("Time cost:%ss" % (T2 - T1))
+guard = statemachine.synthesize(properties, positive_traces, simulate_before_bmc=True)
+T3 = time.time()
+print('Time cost:%ss' % (T3 - T2))
